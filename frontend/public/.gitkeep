@@ -1,0 +1,2 @@
+Placeholder to ensure git tracks this directory.
+Next.js frontend public/ folder — COPY step in frontend/Dockerfile requires it to exist.
