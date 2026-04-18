@@ -1,0 +1,22 @@
+Meridian Airport PMO suite
+===========================
+
+Copyright (c) GV Softwares. All rights reserved.
+Developed by Gaurav Vatsa.
+
+This software and its source code are the proprietary and confidential
+intellectual property of GV Softwares. No part of this repository — including
+but not limited to the backend application (FastAPI / SQLAlchemy / Alembic),
+the frontend application (Next.js / React / Tailwind), the data models,
+Pydantic schemas, API routes, database migrations, seed scripts, frontend
+components, layout, palette, iconography, documentation, conversion playbook,
+or architectural decisions — may be copied, reproduced, modified, distributed,
+sublicensed, reverse-engineered, or used in any form, in whole or in part,
+without the express prior written consent of GV Softwares.
+
+Third-party dependencies distributed via package managers (npm, PyPI) remain
+the property of their respective authors and are governed by their own
+licences. This NOTICE applies only to the original Meridian code and content
+authored by Gaurav Vatsa / GV Softwares.
+
+For licensing, partnership, or deployment enquiries, contact the author.
