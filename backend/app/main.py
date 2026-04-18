@@ -47,6 +47,12 @@ def create_app() -> FastAPI:
         contact={"name": "Gaurav Vatsa — GV Softwares", "email": "gaurav1976@gmail.com"},
         license_info={"name": "Proprietary — (c) GV Softwares. All rights reserved."},
     )
+    # Middleware ordering note: Starlette runs the LAST-added middleware first
+    # (outermost). So for CORS to handle preflights BEFORE the Basic Auth gate
+    # rejects them with 401, Basic Auth must be added FIRST (inner) and CORS
+    # added LAST (outer). Previous order was inverted and caused browsers to
+    # see cross-origin requests as "Failed to fetch" even with correct creds.
+    app.add_middleware(BasicAuthMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins_list,
@@ -54,9 +60,6 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    # Basic Auth front-door — no-op unless BASIC_AUTH_USER/PASSWORD are set.
-    # Add AFTER CORS so preflight OPTIONS still get the right headers.
-    app.add_middleware(BasicAuthMiddleware)
     app.include_router(api_router)
     return app
 
