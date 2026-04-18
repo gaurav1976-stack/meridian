@@ -1,0 +1,36 @@
+# Meridian frontend — Docker build hygiene.
+# Keep the build context small; exclude anything the build regenerates or
+# anything that would leak host-specific state into the image.
+
+node_modules
+.next
+out
+dist
+build
+coverage
+.env
+.env.*
+!.env.example
+
+# IDE / editor
+.idea
+.vscode
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Git
+.git
+.gitignore
+
+# TypeScript incremental cache
+*.tsbuildinfo
+# NOTE: do NOT exclude next-env.d.ts — TypeScript needs it at build time.

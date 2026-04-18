@@ -1,0 +1,117 @@
+# Meridian Airport PMO suite — local + pilot-demo compose stack.
+# (c) GV Softwares. Developed by Gaurav Vatsa. All rights reserved.
+# Proprietary — unauthorised copying, distribution, modification or use prohibited.
+#
+# Usage:
+#   cp .env.example .env
+#   docker compose up --build
+#
+# Services:
+#   postgres   — primary datastore (port 5432)
+#   redis      — reserved for future workers/queues (port 6379, currently idle)
+#   backend    — FastAPI, auto-migrates + seeds on startup (port 8000)
+#   frontend   — Next.js 14 dev server (port 3000)
+#
+# The worker service is intentionally omitted for this release — the worker
+# module stubs under backend/app/workers/ are not populated yet. When queue
+# processing is wired, reintroduce `worker: build: ./backend …` with
+# `command: ["python", "-m", "app.workers.run"]`.
+
+name: meridian
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: meridian
+      POSTGRES_PASSWORD: meridian
+      POSTGRES_DB: meridian
+    ports:
+      - "5432:5432"
+    volumes:
+      - meridian_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meridian"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://meridian:meridian@postgres:5432/meridian
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - meridian_artifacts:/data/artifacts
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Startup chain: migrate → seed → serve. alembic upgrade head is
+    # idempotent; seed.py uses get-or-create so restart is safe.
+    command: >
+      sh -c "alembic upgrade head &&
+             python -m app.seed &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      # For local dev we stop at the `deps` stage of the multi-stage build,
+      # which has node_modules pre-installed but no production compile. The
+      # bind-mount below then overlays the live source tree and `npm run dev`
+      # boots the Next.js dev server with hot reload.
+      # Production (Render) builds the full Dockerfile — no `target:` override.
+      target: deps
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Browser-facing URL (inlined into client bundle, must be reachable
+      # from the user's browser on the host).
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+      # Server-side URL used by async server components inside this container.
+      # Uses the compose service DNS name — `localhost` would resolve to the
+      # frontend container itself, not the backend.
+      API_BASE_URL: http://backend:8000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+    command: ["npm", "run", "dev"]
+
+volumes:
+  meridian_pg_data:
+  meridian_artifacts:
