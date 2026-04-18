@@ -1,0 +1,75 @@
+# Meridian Airport PMO suite — Render.com Blueprint
+# (c) GV Softwares. Developed by Gaurav Vatsa. All rights reserved.
+# Proprietary — unauthorised copying, distribution, modification or use prohibited.
+#
+# This Blueprint provisions the full pilot-demo stack on Render's free tier:
+#   - meridian-postgres   : Postgres 16, 1 GB, 90-day lifetime
+#   - meridian-backend    : FastAPI (uvicorn) in a Python 3.11 Docker image
+#   - meridian-frontend   : Next.js 14 (standalone) in a node:20-alpine image
+#
+# Companion runbook: DEPLOY-RENDER.md (step-by-step, ~25 min first run).
+
+databases:
+  - name: meridian-postgres
+    plan: free
+    databaseName: meridian
+    user: meridian
+    postgresMajorVersion: "16"
+
+services:
+  # -------------------------------------------------------------------------
+  # Backend — FastAPI + Alembic + seed
+  # -------------------------------------------------------------------------
+  - type: web
+    name: meridian-backend
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: meridian-postgres
+          property: connectionString
+      - key: ALLOW_DEV_AUTH_BYPASS
+        value: "true"
+      - key: PORT
+        value: "8000"
+      - key: HOST
+        value: "0.0.0.0"
+      - key: CORS_ORIGINS
+        sync: false
+      - key: BASIC_AUTH_USER
+        sync: false
+      - key: BASIC_AUTH_PASSWORD
+        sync: false
+
+  # -------------------------------------------------------------------------
+  # Frontend — Next.js 14 (standalone)
+  # -------------------------------------------------------------------------
+  - type: web
+    name: meridian-frontend
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    envVars:
+      # SSR / server-to-server calls use the Render internal hostport.
+      - key: API_BASE_URL
+        fromService:
+          type: web
+          name: meridian-backend
+          property: hostport
+      # Browser-side API base must be the public backend URL — filled in by
+      # the operator post-first-deploy (see DEPLOY-RENDER.md §5).
+      - key: NEXT_PUBLIC_API_BASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_APP_NAME
+        value: "Meridian"
+      - key: BASIC_AUTH_USER
+        sync: false
+      - key: BASIC_AUTH_PASSWORD
+        sync: false
