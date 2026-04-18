@@ -29,4 +29,12 @@ RUN mkdir -p /data/artifacts
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Startup chain (run in a shell so && works): migrate schema, seed, serve.
+# - alembic upgrade head is idempotent (no-op on up-to-date DBs)
+# - app.seed uses get-or-create, safe to re-run on every container start
+# - uvicorn binds 0.0.0.0:8000 for Render/Compose health checks
+#
+# Render's Docker Command override is tokenized as exec-form (no shell),
+# so the chain MUST live in the Dockerfile itself (exec form with an
+# explicit /bin/sh -c). Clear any Docker Command override on the service.
+CMD ["/bin/sh", "-c", "alembic upgrade head && python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
