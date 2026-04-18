@@ -166,7 +166,7 @@ def seed() -> None:
             title="Programme Master Schedule R3",
         )
 
-        for ext_id, name, status_, days_offset, is_critical, total_float in [
+        for ext_id, name, days_offset, is_critical, total_float in [
             ("A1000", "Site Establishment", -45, False, 30),
             ("A1010", "Piling — Zone A", -10, True, 5),
             ("A1020", "Pile Cap Construction — Zone A", 14, True, 0),
