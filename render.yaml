@@ -3,9 +3,9 @@
 # Proprietary — unauthorised copying, distribution, modification or use prohibited.
 #
 # This Blueprint provisions the full pilot-demo stack on Render's free tier:
-#   - meridian-postgres   : Postgres 16, 1 GB, 90-day lifetime
-#   - meridian-backend    : FastAPI (uvicorn) in a Python 3.11 Docker image
-#   - meridian-frontend   : Next.js 14 (standalone) in a node:20-alpine image
+#   - meridian-postgres : Postgres 16, 1 GB, 90-day lifetime
+#   - meridian-backend  : FastAPI (uvicorn) in a Python 3.11 Docker image
+#   - meridian-frontend : Next.js 14 (standalone) in a node:20-alpine image
 #
 # Companion runbook: DEPLOY-RENDER.md (step-by-step, ~25 min first run).
 
@@ -28,6 +28,11 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     healthCheckPath: /health
+    # Run alembic migrations and idempotent seed before uvicorn boots.
+    # Without this line, Render falls through to the Dockerfile's default
+    # CMD (uvicorn only) and the DB schema is never created — every
+    # DB-touching route 500s with 'relation "tenants" does not exist'.
+    dockerCommand: sh -c "alembic upgrade head && python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     envVars:
       - key: DATABASE_URL
         fromDatabase:
