@@ -3,41 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BarChart3,
-  Banknote,
-  CalendarClock,
-  FileText,
-  FolderKanban,
-  GitBranch,
   LayoutDashboard,
-  PlaneTakeoff,
-  Ruler,
-  Search,
-  Settings2,
-  ShieldAlert,
-  Users,
+  FolderKanban,
   type LucideIcon,
 } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import type { ModuleRegistryEntry } from "@/lib/types";
 
-// Map the backend-supplied icon string to a real Lucide component. Keeping the
-// map here (vs. on the server) means the backend registry stays JSON-only.
 const ICONS: Record<string, LucideIcon> = {
   LayoutDashboard,
   FolderKanban,
-  Settings2,
-  CalendarClock,
-  ShieldAlert,
-  GitBranch,
-  Banknote,
-  Ruler,
-  FileText,
-  Users,
-  PlaneTakeoff,
-  BarChart3,
-  Search,
 };
 
 interface SidebarProps {
@@ -46,43 +22,55 @@ interface SidebarProps {
 
 export function Sidebar({ modules }: SidebarProps) {
   const pathname = usePathname();
+
+  // Always show at least Dashboard + Projects even if backend is offline
+  const fallback: ModuleRegistryEntry[] = [
+    { key: "dashboard", label: "Dashboard", icon: "LayoutDashboard", route: "/dashboard", is_enabled: true },
+    { key: "projects",  label: "Projects",  icon: "FolderKanban",    route: "/projects",  is_enabled: true },
+  ];
+  const items = modules.length > 0 ? modules : fallback;
+
   return (
-    <aside className="w-64 shrink-0 bg-meridian-900 text-white flex flex-col">
+    <aside className="w-56 shrink-0 bg-meridian-900 text-white flex flex-col">
+      {/* Brand */}
       <div className="px-5 py-5 border-b border-meridian-700">
-        <div className="text-lg font-semibold tracking-wide">Meridian</div>
-        <div className="text-xs text-meridian-100/80 mt-1">
-          Airport Programme PMIS
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-md bg-accent-500 flex items-center justify-center text-white font-bold text-sm">
+            M
+          </div>
+          <div>
+            <div className="text-sm font-semibold tracking-wide leading-tight">Meridian</div>
+            <div className="text-[10px] text-meridian-100/70 leading-tight">Airport PMO Suite</div>
+          </div>
         </div>
       </div>
-      <nav className="flex-1 py-3">
-        {modules.map((m) => {
+
+      {/* Nav */}
+      <nav className="flex-1 py-3 space-y-0.5 px-2">
+        {items.map((m) => {
           const Icon = ICONS[m.icon] ?? LayoutDashboard;
           const active = pathname?.startsWith(m.route);
-          const classes = cn(
-            "flex items-center gap-3 px-5 py-2.5 text-sm",
-            active
-              ? "bg-meridian-700 text-white"
-              : "text-meridian-100/80 hover:bg-meridian-700/60 hover:text-white",
-            !m.is_enabled && "opacity-40 cursor-not-allowed"
-          );
-          if (!m.is_enabled) {
-            return (
-              <div key={m.key} className={classes} title="Module pending port">
-                <Icon className="w-4 h-4" />
-                <span>{m.label}</span>
-              </div>
-            );
-          }
           return (
-            <Link key={m.key} href={m.route} className={classes}>
-              <Icon className="w-4 h-4" />
+            <Link
+              key={m.key}
+              href={m.route}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors",
+                active
+                  ? "bg-meridian-700 text-white font-medium"
+                  : "text-meridian-100/75 hover:bg-meridian-700/50 hover:text-white"
+              )}
+            >
+              <Icon className="w-4 h-4 shrink-0" />
               <span>{m.label}</span>
             </Link>
           );
         })}
       </nav>
-      <div className="px-5 py-3 text-[11px] text-meridian-100/60 border-t border-meridian-700">
-        v0.1.0 • dev
+
+      {/* Footer */}
+      <div className="px-5 py-3 text-[10px] text-meridian-100/50 border-t border-meridian-700">
+        v0.1.0 · © GV Softwares
       </div>
     </aside>
   );
