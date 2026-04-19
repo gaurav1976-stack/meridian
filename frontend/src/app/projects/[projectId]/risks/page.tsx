@@ -1,7 +1,14 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { endpoints } from "@/lib/api/endpoints";
 import type { Risk } from "@/lib/types";
+
+const BACKEND = process.env.NEXT_PUBLIC_API_BASE_URL || "https://meridian-backend-0iy9.onrender.com";
+const AUTH_HEADER = "Basic " + btoa("meridian-demo:uMISq6JJ-uvlYDMik-5NjPsFVsxR4GUqWomSAXRH4Tw");
 
 function scoreColour(score: number): string {
   if (score >= 15) return "bg-rose-200 text-rose-900";
@@ -9,24 +16,44 @@ function scoreColour(score: number): string {
   return "bg-emerald-100 text-emerald-800";
 }
 
-export default async function ProjectRisksPage({
-  params,
-}: {
-  params: { projectId: string };
-}) {
-  let risks: Risk[] = [];
-  try {
-    risks = await endpoints.listRisks(params.projectId);
-  } catch {
-    /* fall through */
-  }
-  const top = [...risks].sort((a, b) => b.residual_score - a.residual_score).slice(0, 10);
+export default function ProjectRisksPage() {
+  const params = useParams<{ projectId: string }>();
+  const [risks, setRisks] = useState<Risk[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`${BACKEND}/projects/${params.projectId}/risks`, {
+          headers: { Authorization: AUTH_HEADER },
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data: Risk[] = await r.json();
+        if (!cancelled) { setRisks(data); setLoading(false); }
+      } catch (e) {
+        if (!cancelled) { setError((e as Error).message); setLoading(false); }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [params.projectId]);
+
+  const top = [...risks].sort((a, b) => b.residual_score - a.residual_score).slice(0, 20);
+
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-semibold text-meridian-900">Risk Register</h1>
+      {error ? (
+        <Card>
+          <CardBody className="text-amber-700 text-sm">
+            Backend unreachable. ({error})
+          </CardBody>
+        </Card>
+      ) : null}
       <Card>
         <CardHeader
-          title={`${risks.length} risks`}
+          title={loading ? "Loading risks…" : `${risks.length} risks`}
           subtitle="5×5 matrix; cells ≥ 12 require Programme Director escalation."
         />
         <CardBody className="p-0">
