@@ -1,37 +1,55 @@
-# Meridian Airport PMO suite — Render.com Blueprint
+# Meridian Airport PMO suite — Render.com Blueprint.
 # (c) GV Softwares. Developed by Gaurav Vatsa. All rights reserved.
-# Proprietary — unauthorised copying, distribution, modification or use prohibited.
+# Proprietary software — unauthorised copying, distribution, modification or
+# use is prohibited.
 #
-# This Blueprint provisions the full pilot-demo stack on Render's free tier:
-#   - meridian-postgres : Postgres 16, 1 GB, 90-day lifetime
-#   - meridian-backend  : FastAPI (uvicorn) in a Python 3.11 Docker image
-#   - meridian-frontend : Next.js 14 (standalone) in a node:20-alpine image
+# This Blueprint deploys the pilot-demo stack to Render as three linked
+# resources:
 #
-# Companion runbook: DEPLOY-RENDER.md (step-by-step, ~25 min first run).
+#   1. meridian-postgres  — managed Postgres 16 (free plan, 90-day lifetime).
+#   2. meridian-backend   — FastAPI Docker service (free plan, 512 MB RAM).
+#                           Runs alembic migrations + seed on every boot.
+#   3. meridian-frontend  — Next.js 14 Docker service (free plan, 512 MB RAM).
+#
+# Two shared secrets gate both web services behind HTTP Basic Auth — set them
+# in the Render dashboard when the Blueprint is first applied:
+#
+#   BASIC_AUTH_USER
+#   BASIC_AUTH_PASSWORD
+#
+# The backend reads them from app/core/config.py; the frontend reads them in
+# src/middleware.ts. Leave them empty to disable Basic Auth (not recommended
+# for a publicly-reachable demo URL).
+#
+# First deploy:
+#   1. Push this repo to GitHub.
+#   2. Render dashboard → Blueprints → New Blueprint Instance → point at repo.
+#   3. Enter the Basic Auth secrets when prompted.
+#   4. Apply. Render will provision Postgres first, then build both services.
+#   5. Frontend service logs the final public URL.
 
 databases:
   - name: meridian-postgres
-    plan: free
     databaseName: meridian
     user: meridian
-    postgresMajorVersion: "16"
+    plan: free
+    # Postgres 16 matches the docker-compose dev image so local/prod parity
+    # is preserved.
+    postgresMajorVersion: 16
 
 services:
-  # -------------------------------------------------------------------------
-  # Backend — FastAPI + Alembic + seed
-  # -------------------------------------------------------------------------
+  # ---------------------------------------------------------------------- backend
   - type: web
     name: meridian-backend
     runtime: docker
     plan: free
-    region: oregon
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
     healthCheckPath: /health
-    # Run alembic migrations and idempotent seed before uvicorn boots.
-    # Without this line, Render falls through to the Dockerfile's default
-    # CMD (uvicorn only) and the DB schema is never created — every
-    # DB-touching route 500s with 'relation "tenants" does not exist'.
+    # Run migrations + seed before boot. Both are idempotent — safe to run
+    # on every container start (including redeploys and cold-wakes on the
+    # free tier). uvicorn --reload is OFF for production; the compose stack
+    # still uses --reload via its command override.
     dockerCommand: sh -c "alembic upgrade head && python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     envVars:
       - key: DATABASE_URL
@@ -40,41 +58,61 @@ services:
           property: connectionString
       - key: ALLOW_DEV_AUTH_BYPASS
         value: "true"
-      - key: PORT
-        value: "8000"
-      - key: HOST
-        value: "0.0.0.0"
       - key: CORS_ORIGINS
+        # Render injects RENDER_EXTERNAL_URL at runtime; the frontend origin
+        # is set explicitly on first apply (Render doesn't let one service
+        # reference another service's URL in the Blueprint spec, so we rely
+        # on this sync:false env being filled in the dashboard after the
+        # first deploy assigns URLs). A wildcard is also acceptable for a
+        # pilot-demo profile.
         sync: false
+      - key: DEBUG
+        value: "false"
+      - key: ARTIFACT_STORAGE_PROVIDER
+        value: local
+      - key: ARTIFACT_STORAGE_LOCAL_DIR
+        value: /data/artifacts
+      - key: VECTOR_STORE_PROVIDER
+        value: mock
+      - key: EMBEDDING_PROVIDER
+        value: mock
       - key: BASIC_AUTH_USER
         sync: false
       - key: BASIC_AUTH_PASSWORD
         sync: false
+      - key: JWT_AUDIENCE
+        value: meridian-api
+      - key: JWT_ISSUER
+        value: https://example.com/oauth2
+      - key: JWT_JWKS_URL
+        value: https://example.com/.well-known/jwks.json
 
-  # -------------------------------------------------------------------------
-  # Frontend — Next.js 14 (standalone)
-  # -------------------------------------------------------------------------
+  # --------------------------------------------------------------------- frontend
   - type: web
     name: meridian-frontend
     runtime: docker
     plan: free
-    region: oregon
-    dockerfilePath: ./frontend/Dockerfile
-    dockerContext: ./frontend
+    rootDir: frontend
+    dockerfilePath: ./Dockerfile
+    # No explicit dockerCommand — the production Dockerfile's CMD
+    # (`node server.js`) is correct for Render.
     envVars:
-      # SSR / server-to-server calls use the Render internal hostport.
+      # Browser-facing API URL: must be set in the Render dashboard after the
+      # first deploy assigns meridian-backend its public *.onrender.com URL.
+      # Example: https://meridian-backend.onrender.com
+      - key: NEXT_PUBLIC_API_BASE_URL
+        sync: false
+      # Server-side API URL used by SSR fetches. Render lets us reference
+      # another service in the same Blueprint by name.
+      # hostport gives "hostname:port" — the client.ts normalises to http://
       - key: API_BASE_URL
         fromService:
           type: web
           name: meridian-backend
           property: hostport
-      # Browser-side API base must be the public backend URL — filled in by
-      # the operator post-first-deploy (see DEPLOY-RENDER.md §5).
-      - key: NEXT_PUBLIC_API_BASE_URL
-        sync: false
-      - key: NEXT_PUBLIC_APP_NAME
-        value: "Meridian"
       - key: BASIC_AUTH_USER
         sync: false
       - key: BASIC_AUTH_PASSWORD
         sync: false
+      - key: NEXT_PUBLIC_APP_NAME
+        value: Meridian
