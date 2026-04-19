@@ -4,28 +4,29 @@
 //
 // Dual base URL: when this module runs on the Next.js server (e.g. inside an
 // async server component, or in a Docker container) the browser-facing
-// `NEXT_PUBLIC_API_BASE_URL` does NOT reach the backend container if set to
-// localhost. Use the server-only `API_BASE_URL` for SSR, with a hardcoded
-// Render production fallback so a mis-set Render env var can’t silently
-// break the demo. The client bundle only sees `NEXT_PUBLIC_*` vars so the
-// second branch runs in the browser.
+// `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000` does NOT reach the backend
+// container — `localhost` resolves to the Next.js container itself. Use the
+// internal compose hostname (`http://backend:8000`) via `API_BASE_URL` instead.
+// In the browser, `process.env.API_BASE_URL` is undefined (only `NEXT_PUBLIC_*`
+// vars are inlined client-side) so we naturally fall back to the public URL.
 
 const isServer = typeof window === "undefined";
 
-// Hardcoded production fallback — used when Render env vars don’t resolve.
-// If you clone this for a different deploy, change the URL or set the
-// API_BASE_URL / NEXT_PUBLIC_API_BASE_URL env var in the Render dashboard.
-const PROD_BACKEND = "https://meridian-backend-0iy9.onrender.com";
+// Normalise the server-side base URL: Render's `hostport` property gives
+// `hostname:port` without a protocol, so we prepend `http://` if needed.
+function normaliseUrl(raw: string): string {
+  if (!raw) return "http://localhost:8000";
+  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+  return `http://${raw}`;
+}
 
 const API_BASE_URL = isServer
-  ? (process.env.API_BASE_URL && process.env.API_BASE_URL.length > 0
-      ? process.env.API_BASE_URL
-      : (process.env.NEXT_PUBLIC_API_BASE_URL && process.env.NEXT_PUBLIC_API_BASE_URL.length > 0
-          ? process.env.NEXT_PUBLIC_API_BASE_URL
-          : PROD_BACKEND))
-  : (process.env.NEXT_PUBLIC_API_BASE_URL && process.env.NEXT_PUBLIC_API_BASE_URL.length > 0
-      ? process.env.NEXT_PUBLIC_API_BASE_URL
-      : PROD_BACKEND);
+  ? normaliseUrl(
+      process.env.API_BASE_URL ??
+      process.env.NEXT_PUBLIC_API_BASE_URL ??
+      "http://localhost:8000"
+    )
+  : (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000");
 
 // Server-side Basic Auth pass-through. When the pilot-demo deploy gates the
 // backend behind Basic Auth (BASIC_AUTH_USER/PASSWORD), Next.js server
