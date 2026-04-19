@@ -1,25 +1,53 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { endpoints } from "@/lib/api/endpoints";
 import type { ScheduleActivity } from "@/lib/types";
 
-export default async function ProjectSchedulePage({
-  params,
-}: {
-  params: { projectId: string };
-}) {
-  let activities: ScheduleActivity[] = [];
-  try {
-    activities = await endpoints.listActivities(params.projectId);
-  } catch {
-    /* fall through */
-  }
+const BACKEND = process.env.NEXT_PUBLIC_API_BASE_URL || "https://meridian-backend-0iy9.onrender.com";
+const AUTH_HEADER = "Basic " + btoa("meridian-demo:uMISq6JJ-uvlYDMik-5NjPsFVsxR4GUqWomSAXRH4Tw");
+
+export default function ProjectSchedulePage() {
+  const params = useParams<{ projectId: string }>();
+  const [activities, setActivities] = useState<ScheduleActivity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`${BACKEND}/projects/${params.projectId}/schedule/activities`, {
+          headers: { Authorization: AUTH_HEADER },
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data: ScheduleActivity[] = await r.json();
+        if (!cancelled) { setActivities(data); setLoading(false); }
+      } catch (e) {
+        if (!cancelled) { setError((e as Error).message); setLoading(false); }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [params.projectId]);
+
+  const critical = activities.filter(a => a.is_critical).length;
+
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-semibold text-meridian-900">Schedule — Activities</h1>
+      {error ? (
+        <Card>
+          <CardBody className="text-amber-700 text-sm">
+            Backend unreachable. ({error})
+          </CardBody>
+        </Card>
+      ) : null}
       <Card>
         <CardHeader
-          title={`${activities.length} activities`}
+          title={loading ? "Loading activities…" : `${activities.length} activities — ${critical} critical`}
           subtitle="Activity-based logic network. Critical path activities are flagged."
         />
         <CardBody className="p-0">
@@ -41,20 +69,12 @@ export default async function ProjectSchedulePage({
                 <tr key={a.id} className="border-t border-meridian-100">
                   <td className="px-5 py-3 font-mono text-xs">{a.activity_id_external}</td>
                   <td className="px-5 py-3">{a.name}</td>
-                  <td className="px-5 py-3">
-                    <StatusBadge value={a.status} />
-                  </td>
+                  <td className="px-5 py-3"><StatusBadge value={a.status} /></td>
                   <td className="px-5 py-3">{a.planned_start ?? "—"}</td>
                   <td className="px-5 py-3">{a.planned_finish ?? "—"}</td>
                   <td className="px-5 py-3">{a.percent_complete}%</td>
                   <td className="px-5 py-3">{a.total_float_days ?? "—"}</td>
-                  <td className="px-5 py-3">
-                    {a.is_critical ? (
-                      <span className="text-rose-700 text-xs font-semibold">CRITICAL</span>
-                    ) : (
-                      <span className="text-meridian-700 text-xs">—</span>
-                    )}
-                  </td>
+                  <td className="px-5 py-3">{a.is_critical ? <span className="text-rose-700 text-xs font-semibold">CRITICAL</span> : <span className="text-meridian-700 text-xs">—</span>}</td>
                 </tr>
               ))}
             </tbody>
