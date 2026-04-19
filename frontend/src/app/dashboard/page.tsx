@@ -1,56 +1,48 @@
-"use client";
-
 import Link from "next/link";
-import { useEffect, useState } from "react";
 
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { ProgressBar } from "@/components/ui/ProgressBar";
+import { endpoints } from "@/lib/api/endpoints";
 import type { Project } from "@/lib/types";
 
-const BACKEND = process.env.NEXT_PUBLIC_API_BASE_URL || "https://meridian-backend-0iy9.onrender.com";
+function statusDot(status: string) {
+  const map: Record<string, string> = {
+    Active: "bg-emerald-500",
+    Planned: "bg-sky-400",
+    "On Hold": "bg-amber-400",
+    Closed: "bg-zinc-400",
+  };
+  return map[status] ?? "bg-zinc-300";
+}
 
-// Basic Auth pass-through for the pilot demo. The frontend edge middleware
-// already validated the user at the frontend origin; re-use the same shared
-// secret to unlock the backend origin for cross-origin fetches.
-const BASIC_AUTH_USER = process.env.NEXT_PUBLIC_BASIC_AUTH_USER || "meridian-demo";
-const BASIC_AUTH_PW = process.env.NEXT_PUBLIC_BASIC_AUTH_PW || "uMISq6JJ-uvlYDMik-5NjPsFVsxR4GUqWomSAXRH4Tw";
-const AUTH_HEADER = "Basic " + btoa(`${BASIC_AUTH_USER}:${BASIC_AUTH_PW}`);
-
-export default function DashboardPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const r = await fetch(`${BACKEND}/projects`, {
-          headers: { Authorization: AUTH_HEADER },
-        });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const data: Project[] = await r.json();
-        if (!cancelled) {
-          setProjects(data);
-          setLoading(false);
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setError((e as Error).message);
-          setLoading(false);
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+export default async function DashboardPage() {
+  let projects: Project[] = [];
+  let error: string | null = null;
+  try {
+    projects = await endpoints.listProjects();
+  } catch (e) {
+    error = (e as Error).message;
+  }
 
   const active = projects.filter((p) => p.status === "Active").length;
+  const planned = projects.filter((p) => p.status === "Planned").length;
+  const onHold = projects.filter((p) => p.status === "On Hold").length;
+  const closed = projects.filter((p) => p.status === "Closed").length;
+
+  // Status distribution for mini bar chart
+  const statusGroups = [
+    { label: "Active", count: active, colour: "bg-emerald-500" },
+    { label: "Planned", count: planned, colour: "bg-sky-400" },
+    { label: "On Hold", count: onHold, colour: "bg-amber-400" },
+    { label: "Closed", count: closed, colour: "bg-zinc-400" },
+  ].filter((g) => g.count > 0);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-meridian-900">Programme Dashboard</h1>
-        <p className="text-sm text-meridian-700">
+        <p className="text-sm text-meridian-600">
           High-level health across active airport programmes.
         </p>
       </div>
@@ -58,34 +50,69 @@ export default function DashboardPage() {
       {error ? (
         <Card>
           <CardBody className="text-amber-700 text-sm">
-            Backend unreachable. ({error})
+            Backend unreachable. Start the API with <code>docker compose up</code>. ({error})
           </CardBody>
         </Card>
       ) : null}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader title="Total projects" />
-          <CardBody className="text-3xl font-semibold text-meridian-900">
-            {loading ? "…" : projects.length}
-          </CardBody>
-        </Card>
-        <Card>
-          <CardHeader title="Active" />
-          <CardBody className="text-3xl font-semibold text-emerald-700">
-            {loading ? "…" : active}
-          </CardBody>
-        </Card>
-        <Card>
-          <CardHeader title="Stage Gate Status" subtitle="Pending wiring to governance module" />
-          <CardBody className="text-sm text-meridian-700">
-            See conversion playbook §A — governance domain not yet ported.
-          </CardBody>
-        </Card>
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KpiCard
+          label="Total Projects"
+          value={projects.length}
+          sub="across all tenants"
+        />
+        <KpiCard
+          label="Active"
+          value={active}
+          sub="currently in delivery"
+          tone="positive"
+        />
+        <KpiCard
+          label="Planned"
+          value={planned}
+          sub="pre-mobilisation"
+          tone="neutral"
+        />
+        <KpiCard
+          label="On Hold"
+          value={onHold}
+          sub="paused delivery"
+          tone={onHold > 0 ? "warning" : "neutral"}
+        />
       </div>
 
+      {/* Status distribution */}
+      {projects.length > 0 && (
+        <Card>
+          <CardHeader title="Portfolio Status Distribution" />
+          <CardBody>
+            <div className="space-y-3">
+              {statusGroups.map((g) => (
+                <div key={g.label} className="flex items-center gap-3">
+                  <span className="w-20 text-xs text-meridian-700 text-right">{g.label}</span>
+                  <div className="flex-1 h-5 bg-meridian-50 rounded overflow-hidden">
+                    <div
+                      className={`h-full ${g.colour} rounded transition-all duration-500`}
+                      style={{ width: `${(g.count / projects.length) * 100}%` }}
+                    />
+                  </div>
+                  <span className="w-8 text-xs font-semibold text-meridian-900 tabular-nums">
+                    {g.count}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
+      {/* Projects table */}
       <Card>
-        <CardHeader title="Projects" subtitle="Click a row to open the project workspace." />
+        <CardHeader
+          title="Projects"
+          subtitle="Click a project name to open its workspace."
+        />
         <CardBody className="p-0">
           <table className="w-full text-sm">
             <thead className="bg-meridian-50 text-left text-meridian-700">
@@ -98,34 +125,39 @@ export default function DashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {projects.length === 0 ? (
                 <tr>
-                  <td className="px-5 py-6 text-meridian-700" colSpan={5}>
-                    Loading projects…
-                  </td>
-                </tr>
-              ) : projects.length === 0 ? (
-                <tr>
-                  <td className="px-5 py-6 text-meridian-700" colSpan={5}>
-                    No projects yet.
+                  <td className="px-5 py-8 text-center text-meridian-600" colSpan={5}>
+                    No projects yet. Run <code className="bg-meridian-100 px-1 rounded">docker compose up</code> to bootstrap demo data.
                   </td>
                 </tr>
               ) : (
                 projects.map((p) => (
-                  <tr key={p.id} className="border-t border-meridian-100 hover:bg-meridian-50/60">
+                  <tr key={p.id} className="border-t border-meridian-100 hover:bg-meridian-50/60 transition-colors">
                     <td className="px-5 py-3 font-mono text-xs">{p.code}</td>
                     <td className="px-5 py-3">
                       <Link
                         href={`/projects/${p.id}`}
-                        className="text-meridian-700 hover:underline"
+                        className="font-medium text-meridian-700 hover:text-meridian-900 hover:underline"
                       >
                         {p.name}
                       </Link>
                     </td>
-                    <td className="px-5 py-3">{p.location ?? "—"}</td>
-                    <td className="px-5 py-3">{p.stage ?? "—"}</td>
+                    <td className="px-5 py-3 text-meridian-600">{p.location ?? "—"}</td>
                     <td className="px-5 py-3">
-                      <StatusBadge value={p.status} />
+                      {p.stage ? (
+                        <span className="bg-meridian-100 text-meridian-700 px-2 py-0.5 rounded text-xs">
+                          {p.stage}
+                        </span>
+                      ) : (
+                        <span className="text-meridian-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${statusDot(p.status)}`} />
+                        <StatusBadge value={p.status} />
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -135,5 +167,35 @@ export default function DashboardPage() {
         </CardBody>
       </Card>
     </div>
+  );
+}
+
+function KpiCard({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: number;
+  sub?: string;
+  tone?: "positive" | "warning" | "critical" | "neutral";
+}) {
+  const colour =
+    tone === "positive"
+      ? "text-emerald-700"
+      : tone === "warning"
+      ? "text-amber-700"
+      : tone === "critical"
+      ? "text-rose-700"
+      : "text-meridian-900";
+  return (
+    <Card>
+      <CardBody className="py-4">
+        <div className="text-xs text-meridian-600 font-medium uppercase tracking-wide">{label}</div>
+        <div className={`mt-1 text-3xl font-semibold tabular-nums ${colour}`}>{value}</div>
+        {sub && <div className="mt-1 text-xs text-meridian-500">{sub}</div>}
+      </CardBody>
+    </Card>
   );
 }
