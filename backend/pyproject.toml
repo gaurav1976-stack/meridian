@@ -38,17 +38,6 @@ dev = [
     "mypy>=1.10",
 ]
 
-[build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools]
-# Pin the shipped package to `app/` — `alembic/` is a migration runner
-# executed in-place by the Dockerfile, not a distribution artefact. Without
-# this, setuptools' flat-layout auto-discovery fails with
-# "Multiple top-level packages discovered" on Render's Docker build.
-packages = ["app"]
-
 [tool.ruff]
 line-length = 120
 target-version = "py311"
