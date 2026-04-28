@@ -6,6 +6,7 @@ seed a tenant + admin so the dev-bypass auth works.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from uuid import uuid4
 
@@ -15,6 +16,10 @@ from sqlalchemy.orm import sessionmaker
 
 # Write the test DB to /tmp to avoid sandbox/path-with-spaces I/O errors.
 _TEST_DB = Path("/tmp/_meridian_test.sqlite")
+_BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
+if str(_BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_ROOT))
 
 
 @pytest.fixture(scope="session", autouse=True)
