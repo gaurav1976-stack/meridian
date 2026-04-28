@@ -23,6 +23,7 @@ out/
 dist/
 *.log
 npm-debug.log*
+*.tsbuildinfo
 
 # OS / editor
 .DS_Store
